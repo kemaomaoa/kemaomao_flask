@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>Gamedev Phaser Workshop - lesson 16: Randomizing gameplay</title>
+    <style>* { padding: 0; margin: 0; }</style>
+    <script src="{{ url_for('static', filename='js/phaser.2.4.2.min.js') }}"></script>
+</head>
+<body>
+
+    <div id="playerInfo">
+        <!-- 玩家信息和得分历史记录将在这里显示 -->
+      </div>
+
+      <style>
+        /* 之前的模态窗口样式 */
+        
+        /* 排行榜列表样式 */
+        #leaderboardList {
+          list-style-type: none;
+          padding: 0;
+        }
+        
+        #leaderboardList li {
+          margin: 5px 0;
+        }
+        </style>
+
+<div id="leaderboardModal" class="modal">
+    <div class="modal-content">
+      <span class="close">&times;</span>
+      <h2>Leaderboard</h2>
+      <ul id="leaderboardList"></ul>
+    </div>
+  </div>
+
+    <style>
+        .modal {
+          display: none;
+          position: fixed;
+          z-index: 1;
+          left: 0;
+          top: 0;
+          width: 100%;
+          height: 100%;
+          overflow: auto;
+          background-color: rgb(0,0,0);
+          background-color: rgba(0,0,0,0.4);
+        }
+        
+        .modal-content {
+          background-color: #fefefe;
+          margin: 15% auto;
+          padding: 20px;
+          border: 1px solid #888;
+          width: 80%;
+        }
+        
+        .close {
+          color: #aaa;
+          float: right;
+          font-size: 28px;
+          font-weight: bold;
+        }
+        
+        .close:hover,
+        .close:focus {
+          color: black;
+          text-decoration: none;
+          cursor: pointer;
+        }
+        </style>
+
+
+<!-- 模态窗口 -->
+<div id="myModal" class="modal">
+  <!-- 模态内容 -->
+  <div class="modal-content">
+    <span class="close">&times;</span>
+    <form id="playerForm">
+      <label for="username">Username:</label>
+      <input type="text" id="username" name="username" required>
+      <input type="submit" value="Submit">
+    </form>
+  </div>
+</div>
+
+<!-- 触发模态窗口的按钮 -->
+<button id="openModalBtn">Your name</button>
+
+
+
+
+
+<script>
+//
+
+// 获取模态窗口元素
+var modal = document.getElementById("myModal");
+
+// 获取打开模态窗口的按钮元素
+var btn = document.getElementById("openModalBtn");
+
+// 获取关闭模态窗口的元素
+var span = document.getElementsByClassName("close")[0];
+
+// 点击按钮打开模态窗口
+btn.onclick = function() {
+  modal.style.display = "block";
+}
+
+// 点击关闭按钮关闭模态窗口
+span.onclick = function() {
+  modal.style.display = "none";
+}
+
+// 点击模态窗口外部关闭模态窗口
+window.onclick = function(event) {
+  if (event.target == modal) {
+    modal.style.display = "none";
+  }
+}
+
+// 处理表单提交
+document.getElementById("playerForm").onsubmit = function(event) {
+  event.preventDefault();
+  var username = document.getElementById("username").value;
+  // 发送 AJAX 请求到 Flask 后端
+  fetch('/add_player', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ username: username }),
+  })
+  .then(response => response.json())
+  .then(data => {
+    console.log(data);
+    modal.style.display = "none";
+    // 可能需要更新页面上的用户信息显示
+  })
+  .catch(error => console.error('Error:', error));
+}
+
+
+//
+//----------------------------
+document.addEventListener('DOMContentLoaded', function() {
+    fetch('/players')
+        .then(response => response.json())
+        .then(data => {
+            console.log(data); // 或者更新页面内容
+        })
+        .catch(error => console.error('Error:', error));
+});
+//----------------------------
+
+
+var game = new Phaser.Game(480, 320, Phaser.AUTO, null, {preload: preload, create: create, update: update});
+
+var ball;
+var paddle;
+var bricks;
+var newBrick;
+var brickInfo;
+var scoreText;
+var score = 0;
+var lives = 3;
+var livesText;
+var lifeLostText;
+var playing = false;
+var startButton;
+
+showLeaderboard();
+function preload() {
+    game.scale.scaleMode = Phaser.ScaleManager.SHOW_ALL;
+    game.scale.pageAlignHorizontally = true;
+    game.scale.pageAlignVertically = true;
+    game.stage.backgroundColor = '#eee';
+    game.load.image('paddle', '/static/paddle.png');
+    game.load.image('brick', '/static/brick.png');
+    game.load.spritesheet('ball', '/static/wobble.png', 20, 20);
+    game.load.spritesheet('button', '/static/button.png', 120, 40);
+}
+function create() {
+    game.physics.startSystem(Phaser.Physics.ARCADE);
+    game.physics.arcade.checkCollision.down = false;
+    ball = game.add.sprite(game.world.width*0.5, game.world.height-25, 'ball');
+    ball.animations.add('wobble', [0,1,0,2,0,1,0,2,0], 24);
+    ball.anchor.set(0.5);
+    game.physics.enable(ball, Phaser.Physics.ARCADE);
+    ball.body.collideWorldBounds = true;
+    ball.body.bounce.set(1);
+    ball.checkWorldBounds = true;
+    ball.events.onOutOfBounds.add(ballLeaveScreen, this);
+
+    paddle = game.add.sprite(game.world.width*0.5, game.world.height-5, 'paddle');
+    paddle.anchor.set(0.5,1);
+    game.physics.enable(paddle, Phaser.Physics.ARCADE);
+    paddle.body.immovable = true;
+
+    initBricks();
+
+    textStyle = { font: '18px Arial', fill: '#0095DD' };
+    scoreText = game.add.text(5, 5, 'Points: 0', textStyle);
+    livesText = game.add.text(game.world.width-5, 5, 'Lives: '+lives, textStyle);
+    livesText.anchor.set(1,0);
+    lifeLostText = game.add.text(game.world.width*0.5, game.world.height*0.5, 'Life lost, tap to continue', textStyle);
+    lifeLostText.anchor.set(0.5);
+    lifeLostText.visible = false;
+
+    startButton = game.add.button(game.world.width*0.5, game.world.height*0.5, 'button', startGame, this, 1, 0, 2);
+    startButton.anchor.set(0.5);
+}
+function update() {
+    game.physics.arcade.collide(ball, paddle, ballHitPaddle);
+    game.physics.arcade.collide(ball, bricks, ballHitBrick);
+    if(playing) {
+        paddle.x = game.input.x || game.world.width*0.5;
+    }
+}
+function initBricks() {
+    brickInfo = {
+        width: 50,
+        height: 20,
+        count: {
+            row: 7,
+            col: 3
+        },
+        offset: {
+            top: 50,
+            left: 60
+        },
+        padding: 10
+    }
+    bricks = game.add.group();
+    for(c=0; c<brickInfo.count.col; c++) {
+        for(r=0; r<brickInfo.count.row; r++) {
+            var brickX = (r*(brickInfo.width+brickInfo.padding))+brickInfo.offset.left;
+            var brickY = (c*(brickInfo.height+brickInfo.padding))+brickInfo.offset.top;
+            newBrick = game.add.sprite(brickX, brickY, 'brick');
+            game.physics.enable(newBrick, Phaser.Physics.ARCADE);
+            newBrick.body.immovable = true;
+            newBrick.anchor.set(0.5);
+            bricks.add(newBrick);
+        }
+    }
+}
+function ballHitBrick(ball, brick) {
+    var killTween = game.add.tween(brick.scale);
+    killTween.to({x:0,y:0}, 200, Phaser.Easing.Linear.None);
+    killTween.onComplete.addOnce(function(){
+        brick.kill();
+    }, this);
+    killTween.start();
+    score += 10;
+    scoreText.setText('Points: '+score);
+    if(score === brickInfo.count.row*brickInfo.count.col*10) {
+        alert('You won the game, congratulations!');
+        location.reload();
+    }
+}
+function ballLeaveScreen() {
+    lives--;
+    if(lives) {
+        livesText.setText('Lives: '+lives);
+        lifeLostText.visible = true;
+        ball.reset(game.world.width*0.5, game.world.height-25);
+        paddle.reset(game.world.width*0.5, game.world.height-5);
+        game.input.onDown.addOnce(function(){
+            lifeLostText.visible = false;
+            ball.body.velocity.set(150, -150);
+        }, this);
+        showLeaderboard();
+    }
+    else {
+        showLeaderboard();
+        alert('You lost, game over!');
+        location.reload();
+    }
+}
+function ballHitPaddle(ball, paddle) {
+    ball.animations.play('wobble');
+    ball.body.velocity.x = -1*5*(paddle.x-ball.x);
+}
+function startGame() {
+    startButton.destroy();
+    ball.body.velocity.set(150, -150);
+    playing = true;
+}
+//-----------------------------
+function sendScore(playerId, score) {
+    fetch(`/players/${playerId}/scores`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ score: score }),
+    })
+    .then(response => response.json())
+    .then(data => console.log(data))
+    .catch(error => console.error('Error:', error));
+}
+//-----------------------------
+// 假设这个函数在玩家信息更新后被调用
+function updatePlayerInfo() {
+  fetch('/players/<player_id>')
+    .then(response => response.json())
+    .then(data => {
+      var playerInfoDiv = document.getElementById('playerInfo');
+      // 清空并更新玩家信息显示区域
+      playerInfoDiv.innerHTML = `<h1>${data.username}</h1><p>Score: ${data.scores}</p>`;
+    })
+    .catch(error => console.error('Error:', error));
+}
+//
+// 获取模态窗口元素
+var leaderboardModal = document.getElementById("leaderboardModal");
+
+// 获取关闭模态窗口的元素
+var closeBtn = document.getElementsByClassName("close")[1]; // 假设这是第二个关闭按钮
+
+// 点击关闭按钮关闭模态窗口
+closeBtn.onclick = function() {
+  leaderboardModal.style.display = "none";
+}
+
+// 点击页面其他区域关闭模态窗口
+window.onclick = function(event) {
+  if (event.target == leaderboardModal) {
+    leaderboardModal.style.display = "none";
+  }
+}
+
+// 游戏结束后显示排行榜
+function showLeaderboard() {
+  fetch('/leaderboard')
+    .then(response => response.json())
+    .then(data => {
+      var leaderboardList = document.getElementById('leaderboardList');
+      leaderboardList.innerHTML = ''; // 清空列表
+      data.forEach(player => {
+        var listItem = document.createElement('li');
+        listItem.textContent = `${player.username}: ${player.scores.reduce((a, b) => a + b, 0)}`;
+        leaderboardList.appendChild(listItem);
+      });
+      leaderboardModal.style.display = "block"; // 显示模态窗口
+    })
+    .catch(error => console.error('Error:', error));
+}
+//
+</script>
+</body>
+</html>
