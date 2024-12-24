@@ -4,41 +4,158 @@
     <meta charset="utf-8" />
     <title>Gamedev Phaser Workshop - lesson 16: Randomizing gameplay</title>
     <style>* { padding: 0; margin: 0; }</style>
-    <script src="../static/js/phaser.2.4.2.min.js"></script>
+    <script src="{{ url_for('static', filename='js/phaser.2.4.2.min.js') }}"></script>
 </head>
 <body>
-<script src="{{ url_for('static', filename='js/script.js') }}">
-function sendScore(playerId, score) {
-    fetch(`/players/${playerId}/scores`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ score: score }),
-    })
-    .then(response => response.json())
-    .then(data => console.log(data))
-    .catch((error) => console.error('Error:', error));
+
+    <div id="playerInfo">
+        <!-- 玩家信息和得分历史记录将在这里显示 -->
+      </div>
+
+      <style>
+        /* 之前的模态窗口样式 */
+        
+        /* 排行榜列表样式 */
+        #leaderboardList {
+          list-style-type: none;
+          padding: 0;
+        }
+        
+        #leaderboardList li {
+          margin: 5px 0;
+        }
+        </style>
+
+<div id="leaderboardModal" class="modal">
+    <div class="modal-content">
+      <span class="close">&times;</span>
+      <h2>Leaderboard</h2>
+      <ul id="leaderboardList"></ul>
+    </div>
+  </div>
+
+    <style>
+        .modal {
+          display: none;
+          position: fixed;
+          z-index: 1;
+          left: 0;
+          top: 0;
+          width: 100%;
+          height: 100%;
+          overflow: auto;
+          background-color: rgb(0,0,0);
+          background-color: rgba(0,0,0,0.4);
+        }
+        
+        .modal-content {
+          background-color: #fefefe;
+          margin: 15% auto;
+          padding: 20px;
+          border: 1px solid #888;
+          width: 80%;
+        }
+        
+        .close {
+          color: #aaa;
+          float: right;
+          font-size: 28px;
+          font-weight: bold;
+        }
+        
+        .close:hover,
+        .close:focus {
+          color: black;
+          text-decoration: none;
+          cursor: pointer;
+        }
+        </style>
+
+
+<!-- 模态窗口 -->
+<div id="myModal" class="modal">
+  <!-- 模态内容 -->
+  <div class="modal-content">
+    <span class="close">&times;</span>
+    <form id="playerForm">
+      <label for="username">Username:</label>
+      <input type="text" id="username" name="username" required>
+      <input type="submit" value="Submit">
+    </form>
+  </div>
+</div>
+
+<!-- 触发模态窗口的按钮 -->
+<button id="openModalBtn">Your name</button>
+
+
+
+
+
+<script>
+//
+
+// 获取模态窗口元素
+var modal = document.getElementById("myModal");
+
+// 获取打开模态窗口的按钮元素
+var btn = document.getElementById("openModalBtn");
+
+// 获取关闭模态窗口的元素
+var span = document.getElementsByClassName("close")[0];
+
+// 点击按钮打开模态窗口
+btn.onclick = function() {
+  modal.style.display = "block";
 }
 
-function getPlayerInfo() {
+// 点击关闭按钮关闭模态窗口
+span.onclick = function() {
+  modal.style.display = "none";
+}
+
+// 点击模态窗口外部关闭模态窗口
+window.onclick = function(event) {
+  if (event.target == modal) {
+    modal.style.display = "none";
+  }
+}
+
+// 处理表单提交
+document.getElementById("playerForm").onsubmit = function(event) {
+  event.preventDefault();
+  var username = document.getElementById("username").value;
+  // 发送 AJAX 请求到 Flask 后端
+  fetch('/add_player', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ username: username }),
+  })
+  .then(response => response.json())
+  .then(data => {
+    console.log(data);
+    modal.style.display = "none";
+    // 可能需要更新页面上的用户信息显示
+  })
+  .catch(error => console.error('Error:', error));
+}
+
+
+//
+//----------------------------
+document.addEventListener('DOMContentLoaded', function() {
     fetch('/players')
-    .then(response => response.json())
-    .then(data => {
-        console.log('Players:', data);
-    })
-    .catch((error) => console.error('Error:', error));
-}
+        .then(response => response.json())
+        .then(data => {
+            console.log(data); // 或者更新页面内容
+        })
+        .catch(error => console.error('Error:', error));
+});
+//----------------------------
 
-// 在游戏结束时调用 sendScore
-// 假设你有一个函数 gameover() 在游戏结束时被调用
-function gameover() {
-    const playerId = 1; // 假设玩家ID为1
-    const finalScore = score; // 假设你有一个变量 score 存储最终分数
-    sendScore(playerId, finalScore);
-    alert('Game Over! Your score has been submitted.');
-    location.reload();
-}
+
 var game = new Phaser.Game(480, 320, Phaser.AUTO, null, {preload: preload, create: create, update: update});
 
 var ball;
@@ -54,15 +171,16 @@ var lifeLostText;
 var playing = false;
 var startButton;
 
+showLeaderboard();
 function preload() {
     game.scale.scaleMode = Phaser.ScaleManager.SHOW_ALL;
     game.scale.pageAlignHorizontally = true;
     game.scale.pageAlignVertically = true;
     game.stage.backgroundColor = '#eee';
-    game.load.image('paddle', '../static/paddle.png');
-    game.load.image('brick', '../static/brick.png');
-    game.load.spritesheet('ball', '../static/wobble.png', 20, 20);
-    game.load.spritesheet('button', '../static/button.png', 120, 40);
+    game.load.image('paddle', '/static/paddle.png');
+    game.load.image('brick', '/static/brick.png');
+    game.load.spritesheet('ball', '/static/wobble.png', 20, 20);
+    game.load.spritesheet('button', '/static/button.png', 120, 40);
 }
 function create() {
     game.physics.startSystem(Phaser.Physics.ARCADE);
@@ -153,8 +271,10 @@ function ballLeaveScreen() {
             lifeLostText.visible = false;
             ball.body.velocity.set(150, -150);
         }, this);
+        showLeaderboard();
     }
     else {
+        showLeaderboard();
         alert('You lost, game over!');
         location.reload();
     }
@@ -168,6 +288,67 @@ function startGame() {
     ball.body.velocity.set(150, -150);
     playing = true;
 }
+//-----------------------------
+function sendScore(playerId, score) {
+    fetch(`/players/${playerId}/scores`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ score: score }),
+    })
+    .then(response => response.json())
+    .then(data => console.log(data))
+    .catch(error => console.error('Error:', error));
+}
+//-----------------------------
+// 假设这个函数在玩家信息更新后被调用
+function updatePlayerInfo() {
+  fetch('/players/<player_id>')
+    .then(response => response.json())
+    .then(data => {
+      var playerInfoDiv = document.getElementById('playerInfo');
+      // 清空并更新玩家信息显示区域
+      playerInfoDiv.innerHTML = `<h1>${data.username}</h1><p>Score: ${data.scores}</p>`;
+    })
+    .catch(error => console.error('Error:', error));
+}
+//
+// 获取模态窗口元素
+var leaderboardModal = document.getElementById("leaderboardModal");
+
+// 获取关闭模态窗口的元素
+var closeBtn = document.getElementsByClassName("close")[1]; // 假设这是第二个关闭按钮
+
+// 点击关闭按钮关闭模态窗口
+closeBtn.onclick = function() {
+  leaderboardModal.style.display = "none";
+}
+
+// 点击页面其他区域关闭模态窗口
+window.onclick = function(event) {
+  if (event.target == leaderboardModal) {
+    leaderboardModal.style.display = "none";
+  }
+}
+
+// 游戏结束后显示排行榜
+function showLeaderboard() {
+  fetch('/leaderboard')
+    .then(response => response.json())
+    .then(data => {
+      var leaderboardList = document.getElementById('leaderboardList');
+      leaderboardList.innerHTML = ''; // 清空列表
+      data.forEach(player => {
+        var listItem = document.createElement('li');
+        listItem.textContent = `${player.username}: ${player.scores.reduce((a, b) => a + b, 0)}`;
+        leaderboardList.appendChild(listItem);
+      });
+      leaderboardModal.style.display = "block"; // 显示模态窗口
+    })
+    .catch(error => console.error('Error:', error));
+}
+//
 </script>
 </body>
 </html>

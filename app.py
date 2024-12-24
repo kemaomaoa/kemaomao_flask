@@ -1,13 +1,14 @@
 from flask import Flask, render_template, request, jsonify
 from flask_sqlalchemy import SQLAlchemy
+from flask_cors import CORS
 
 app = Flask(__name__)
+CORS(app)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///game.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 app.app_context().push()
 
-db.create_all()
 
 class Player(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -39,6 +40,23 @@ def add_score(player_id):
     db.session.commit()
     return jsonify({'message': 'Score added successfully'}), 201
 
+@app.route('/add_player', methods=['POST'])
+def add_player():
+    username = request.json.get('username')
+    if not username:
+        return jsonify({'error': 'Username is required'}), 400
+    new_player = Player(username=username)
+    db.session.add(new_player)
+    db.session.commit()
+    return jsonify({'message': 'Player added successfully'}), 201
+@app.route('/leaderboard')
+def leaderboard():
+    players = Player.query.all()
+    leaderboard_data = [
+        {'username': player.username, 'scores': [score.score for score in player.scores]}
+        for player in players
+    ]
+    return jsonify(leaderboard_data)
 
 if __name__ == "__main__":
     app.run(debug=True)
